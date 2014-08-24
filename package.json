@@ -1,0 +1,15 @@
+{
+  "name": "node-proxy-jq-playground",
+  "version": "0.0.1",
+  "description": "Simple node http-proxy for playing DOM with the jQuery.",
+  "main": "node-proxy-jq-playground.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Yusuke SAITO",
+  "license": "MIT",
+  "devDependencies": {
+    "iconv": "^2.1.4",
+    "jsdom": "^1.0.0-pre.1"
+  }
+}

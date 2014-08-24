@@ -2,16 +2,11 @@ var http = require('http'),
     url = require('url'),
     iconv = require('iconv').Iconv,
     jsdom = require('jsdom'),
-    fs = require('fs'),
+    zlib = require('zlib'),
     port = 8088;
 
 http.createServer(function(req, res) {
-
-  var x = url.parse(req.url);  
-
-  // 取り急ぎgzipしないように設定
-  req.headers['accept-encoding'] = '';
-
+  var x = url.parse(req.url);
   var opt = {
     host: x.hostname,
     port: x.port || 80,
@@ -21,34 +16,50 @@ http.createServer(function(req, res) {
   };  
 
   var isHtml = new String(req.headers['accept']).indexOf('text/html') > -1;
-  var isGzip = new String(req.headers['accept-encoding']).indexOf('gzip') > -1;
   
-  var proxyReq;
+  var proxyReq, inRes, outRes;
   var buffer = [];
   var bodyLen = 0;
 
-  /* htmlを取得するリクエストの場合 */
+  /* htmlを取得するリクエストの場合はレスポンスを加工できるようにする */
   if ( isHtml ) {    
     proxyReq = http.request(opt, function(proxyRes) {
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      var encoding = proxyRes.headers['content-encoding'];
 
-      // データ受信中の処理
-      proxyRes.on('data', function(chunk) {
+      switch ( encoding ) {
+        case 'gzip':
+          inRes = zlib.createGunzip();
+          proxyRes.pipe(inRes);
+          break;
+        case 'deflate':
+          inRes = zlib.createInflate();
+          proxyRes.pipe(inRes);
+          break;
+        default:
+          inRes = proxyRes;
+          break;
+      }
+
+      /* 分割されて受け取ったデータは一旦格納し、最後に連結 */
+      inRes.on('data', function(chunk) {
         buffer.push(chunk);      
         bodyLen += chunk.length;
       });
 
-      // データ受信終了時の処理
-      proxyRes.on('end', function() {
-        
+      /* 受信終了時にすべて処理する */
+      inRes.on('end', function() {
+
         if ( buffer.length ) {
+          /* すべてのChunkを結合 */
           var _buf = new Buffer(bodyLen);
           var i = 0;
           buffer.forEach(function (chunk) {
             chunk.copy(_buf, i, 0, chunk.length);
             i += chunk.length;
           });
-
+          
+          /* metaタグから文字コードを取得（一度utf-8に変換して遊ぶ） */
           var bin = _buf.toString('binary');
           var cap = bin.match(/<(meta|META)\b[^>]*charset=["']?([-\w]+)/i);
           var charset = (cap !== null) ? cap[2] : 'utf-8';          
@@ -68,13 +79,25 @@ http.createServer(function(req, res) {
             done: function(errors, window) {
               var $ = window.$;
 
-              // ここで色々できる
+              /* ここで色々できる */
               $('div').css('background-color', '#f00');
-
-              res.end(jsdom.serializeDocument2Binary(window.document));
+              
+              switch ( encoding ) {
+                case 'gzip':
+                  outRes = zlib.createGzip();
+                  outRes.pipe(res);
+                  break;
+                case 'deflate':
+                  outRes = zlib.createDeflate();
+                  outRes.pipe(res);
+                  break;
+                default:
+                  outRes = res;                  
+                  break;
+              }
+              outRes.end(jsdom.serializeDocument2Binary(window.document));
             }
           });
-
         } else {
           res.end();  
         }
@@ -85,7 +108,6 @@ http.createServer(function(req, res) {
     /* html以外を取得するリクエストの場合は中継のみ */
     proxyReq = http.request(opt, function(proxyRes) {
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      // レスポンスをそのままサーバへ中継する
       proxyRes.pipe(res);
     }); 
   }
