@@ -24,7 +24,6 @@ http.createServer(function(req, res) {
   /* htmlを取得するリクエストの場合はレスポンスを加工できるようにする */
   if ( isHtml ) {    
     proxyReq = http.request(opt, function(proxyRes) {
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
       var encoding = proxyRes.headers['content-encoding'];
 
       switch ( encoding ) {
@@ -100,7 +99,13 @@ http.createServer(function(req, res) {
                   outRes = res;                  
                   break;
               }
-              outRes.end(jsdom.serializeDocument2Binary(window.document));
+              _buf = jsdom.serializeDocument2Binary(window.document);
+
+              /* 変更後のresponseでcontent-lengthを更新してからヘッダを書き込む */
+              proxyRes.headers['content-length'] = _buf.length;
+              res.writeHead(proxyRes.statusCode, proxyRes.headers);
+
+              outRes.end(_buf);
             }
           });
         } else {
