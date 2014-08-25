@@ -76,12 +76,17 @@ http.createServer(function(req, res) {
           jsdom.env({
             html: html,
             scripts: ['http://code.jquery.com/jquery-2.1.1.js'],
-            done: function(errors, window) {
-              var $ = window.$;
+            done: function (errors, window) {
 
-              /* ここで色々できる */
-              $('div').css('background-color', '#f00');
+              /* Here is the playground. */
+              (function (window, document, $) {
+
+                /* ここで色々できる */
+                $('div').css('background-color', '#f00');
+
+              }(window, window.document, window.jQuery));
               
+              /* クライアントに返す処理 */
               switch ( encoding ) {
                 case 'gzip':
                   outRes = zlib.createGzip();
